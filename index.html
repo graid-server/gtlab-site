@@ -1,0 +1,291 @@
+<!-- 📄 ./templates/index.html -->
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+  <meta charset="UTF-8" />
+  <title>GT LAB - Bot Laboratory</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+  <style>
+    body { background-color: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; }
+    .bot-header { background-color: #1e293b; padding: 20px; border-bottom: 1px solid #334155; text-align: center; }
+    .branding { display: flex; align-items: center; justify-content: center; gap: 15px; }
+    .branding img { height: 70px; }
+    .branding h1 { font-size: 2rem; color: #38bdf8; margin: 0; }
+    .metrics-box, .chart-box, .log-box, .task-table-box, .finance-box, .wallet-box {
+      background-color: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px;
+    }
+    .badge-status { padding: 5px 10px; border-radius: 5px; }
+    .badge-running { background-color: #22c55e; }
+    .badge-stopped { background-color: #ef4444; }
+    .log-box { max-height: 300px; overflow-y: auto; font-size: 14px; }
+    canvas { background-color: #0f172a; }
+    .spinner-border { width: 1rem; height: 1rem; border-width: .15em; }
+  </style>
+</head>
+<body>
+<div class="bot-header">
+  <div class="branding">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="GT Lab Logo" />
+    <h1><i class="fas fa-robot me-2"></i>GT LAB - Bot Laboratory</h1>
+  </div>
+</div>
+
+<div class="container my-4">
+
+  <!-- Bot Status + Controls -->
+  <div class="metrics-box text-center">
+    <div class="row">
+      <div class="col-md-4"><h6>რეგისტრაციის ბოტი</h6><span id="status-registration" class="badge badge-status">...</span></div>
+      <div class="col-md-4"><h6>შემოსავალი 1 ბოტი</h6><span id="status-earning1" class="badge badge-status">...</span></div>
+      <div class="col-md-4"><h6>შემოსავალი 2 ბოტი</h6><span id="status-earning2" class="badge badge-status">...</span></div>
+    </div>
+    <div class="mt-3">
+      <button id="start-btn" class="btn btn-success me-2"><i class="fas fa-play me-1"></i> გაშვება</button>
+      <button id="stop-btn" class="btn btn-danger"><i class="fas fa-stop me-1"></i> გაჩერება</button>
+    </div>
+  </div>
+
+  <!-- Task Stats -->
+  <div class="metrics-box row text-center">
+    <div class="col-md-4"><h6>სულ დავალებები</h6><strong id="total-tasks">0</strong></div>
+    <div class="col-md-4"><h6 class="text-success">წარმატებული</h6><strong id="completed-tasks">0</strong></div>
+    <div class="col-md-4"><h6 class="text-warning">დასამუშავებელი</h6><strong id="pending-tasks">0</strong></div>
+  </div>
+
+  <!-- Activity Chart -->
+  <div class="chart-box">
+    <h5><i class="fas fa-chart-line me-2"></i>ბოტების აქტივობა</h5>
+    <div class="text-center" id="activity-loading"><div class="spinner-border text-info"></div></div>
+    <canvas id="activityChart" height="100" class="d-none"></canvas>
+  </div>
+
+  <!-- Wallet -->
+  <div class="wallet-box">
+    <h5><i class="fas fa-wallet me-2"></i>ბალანსი</h5>
+    <p>მიმდინარე ბალანსი: <strong id="wallet-balance">$0.00</strong></p>
+    <div class="input-group mt-3">
+      <input type="number" id="income-amount" class="form-control" placeholder="თანხა ($)" />
+      <button id="add-income-btn" class="btn btn-outline-success"><i class="fas fa-plus"></i> დამატება</button>
+    </div>
+    <div id="wallet-msg" class="mt-2 text-success"></div>
+
+    <!-- Wallet Address + Currency -->
+    <div class="mt-4">
+      <h6><i class="fas fa-link me-2"></i>საფულის მისამართი</h6>
+      <div class="input-group mb-2">
+        <input type="text" id="wallet-address" class="form-control" placeholder="მისამართი">
+        <select id="wallet-currency" class="form-select w-auto">
+          <option value="USDT">USDT</option>
+          <option value="BTC">BTC</option>
+          <option value="ETH">ETH</option>
+        </select>
+        <button id="update-wallet-address-btn" class="btn btn-outline-primary"><i class="fas fa-save"></i> შენახვა</button>
+      </div>
+      <small class="text-info">შეიძლება მიუთითო სხვა პირის მისამართიც.</small>
+      <div id="wallet-address-msg" class="mt-2 text-success"></div>
+    </div>
+
+    <!-- Request Payout -->
+    <div class="mt-4">
+      <h6><i class="fas fa-paper-plane me-2"></i>თანხის გადმოწერა</h6>
+      <div class="input-group">
+        <input type="number" id="payout-amount" class="form-control" placeholder="თანხა ($)">
+        <button id="request-payout-btn" class="btn btn-outline-warning"><i class="fas fa-share"></i> მოთხოვნა</button>
+      </div>
+      <div id="payout-msg" class="mt-2"></div>
+    </div>
+  </div>
+
+  <!-- Wallet History -->
+  <div class="chart-box">
+    <h5><i class="fas fa-chart-area me-2"></i>ბალანსის ზრდა</h5>
+    <canvas id="walletHistoryChart" height="100"></canvas>
+  </div>
+
+  <!-- Payout History -->
+  <div class="task-table-box">
+    <h5><i class="fas fa-history me-2"></i>გადახდის ისტორია</h5>
+    <table class="table table-dark table-striped table-bordered">
+      <thead><tr><th>თარიღი</th><th>თანხა</th><th>ვალუტა</th><th>მისამართი</th><th>სტატუსი</th></tr></thead>
+      <tbody id="payout-history-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Finance Summary -->
+  <div class="finance-box">
+    <h5><i class="fas fa-dollar-sign me-2"></i>ფინანსები</h5>
+    <input type="text" id="daterange" class="form-control w-auto bg-dark text-white border-0 mb-3" />
+    <p>საერთო შემოსავალი: <strong id="total-income">$0.00</strong></p>
+    <ul id="income-details" class="mt-3"></ul>
+  </div>
+
+  <!-- Tasks -->
+  <div class="task-table-box">
+    <h5><i class="fas fa-tasks me-2"></i>დავალებები</h5>
+    <div class="d-flex mb-2">
+      <input type="text" id="task-search" class="form-control me-2" placeholder="ძებნა Email-ით">
+      <select id="task-status-filter" class="form-select w-auto">
+        <option value="all">ყველა</option>
+        <option value="Pending">Pending</option>
+        <option value="Processing">Processing</option>
+        <option value="Success">Success</option>
+        <option value="Failed">Failed</option>
+      </select>
+    </div>
+    <table class="table table-dark table-striped table-bordered">
+      <thead><tr><th>ID</th><th>Email</th><th>URL</th><th>ტიპი</th><th>სტატუსი</th></tr></thead>
+      <tbody id="task-table-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Logs -->
+  <div class="log-box">
+    <h5><i class="fas fa-terminal me-2"></i>ლოგები</h5>
+    <pre id="log-content">{{ logs }}</pre>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:11">
+  <div id="toast" class="toast text-bg-info border-0" role="alert">
+    <div class="toast-body"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+
+<script>
+let startDate = moment().subtract(7, 'days');
+let endDate = moment();
+
+function showToast(msg, type="info") {
+  $('#toast').removeClass().addClass(`toast text-bg-${type} border-0`);
+  $('#toast .toast-body').text(msg);
+  new bootstrap.Toast(document.getElementById('toast')).show();
+}
+
+function fetchStatusAndStats() {
+  $.get('/get_status_and_stats', res => {
+    $('#status-registration').text(res.bot_status.registration).toggleClass('badge-running', res.bot_status.registration === 'მოქმედებაშია').toggleClass('badge-stopped', res.bot_status.registration !== 'მოქმედებაშია');
+    $('#status-earning1').text(res.bot_status.earning1).toggleClass('badge-running', res.bot_status.earning1 === 'მოქმედებაშია').toggleClass('badge-stopped', res.bot_status.earning1 !== 'მოქმედებაშია');
+    $('#status-earning2').text(res.bot_status.earning2).toggleClass('badge-running', res.bot_status.earning2 === 'მოქმედებაშია').toggleClass('badge-stopped', res.bot_status.earning2 !== 'მოქმედებაშია');
+    $('#total-tasks').text(res.stats.total_tasks);
+    $('#completed-tasks').text(res.stats.completed_tasks);
+    $('#pending-tasks').text(res.stats.pending_tasks);
+  });
+}
+
+function loadWalletAddress() {
+  $.get('/get_wallet_address', res => {
+    $('#wallet-address').val(res.address);
+  });
+}
+
+$('#update-wallet-address-btn').click(() => {
+  const addr = $('#wallet-address').val().trim();
+  if (!addr) return showToast('მისამართი ცარიელია', 'danger');
+  $.ajax({
+    url: '/set_wallet_address', method: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ address: addr }),
+    success: res => { showToast('მისამართი განახლდა', 'success'); $('#wallet-address-msg').text(`ახალი მისამართი: ${res.new_address}`); }
+  });
+});
+
+$('#request-payout-btn').click(() => {
+  const amount = parseFloat($('#payout-amount').val());
+  const currency = $('#wallet-currency').val();
+  if (!amount || amount <= 0) return showToast('გთხოვ შეიყვანო სწორი თანხა', 'danger');
+  $.ajax({
+    url: '/crypto_payout', method: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ amount, currency }),
+    success: res => { showToast(res.message || 'გადახდა მოთხოვნილია', res.success ? 'success' : 'danger'); fetchPayoutHistory(); }
+  });
+});
+
+function fetchPayoutHistory() {
+  $.get('/get_payout_history', res => {
+    const rows = res.map(p => `<tr><td>${p.date}</td><td>$${p.amount}</td><td>${p.currency}</td><td>${p.address}</td><td>${p.status}</td></tr>`);
+    $('#payout-history-body').html(rows.join(''));
+  });
+}
+
+function updateActivityChart() {
+  $.get('/get_activity_stats', function(data) {
+    $('#activity-loading').addClass('d-none');
+    $('#activityChart').removeClass('d-none');
+    const days = [...new Set(Object.values(data).flatMap(bot => Object.keys(bot)))].sort();
+    const datasets = Object.keys(data).map((bot, idx) => ({
+      label: bot, data: days.map(d => data[bot][d] || 0),
+      borderColor: ['#38bdf8', '#10b981', '#f59e0b'][idx], fill: false, tension: 0.4
+    }));
+    new Chart(document.getElementById('activityChart'), { type: 'line', data: { labels: days, datasets }, options: { responsive: true, scales: { y: { beginAtZero: true } } } });
+  });
+}
+
+function updateWalletBalance() {
+  $.get('/get_wallet_balance', res => $('#wallet-balance').text(`$${parseFloat(res.balance).toFixed(2)}`));
+}
+
+function updateWalletHistoryChart() {
+  $.get('/get_wallet_history', res => {
+    new Chart(document.getElementById('walletHistoryChart'), { type: 'line', data: { labels: res.dates, datasets: [{ label: 'ბალანსი $', data: res.balances, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.2)', fill: true, tension: 0.4 }] } });
+  });
+}
+
+function fetchFinance() {
+  $.get('/get_finance_summary', { start: startDate.format('YYYY-MM-DD'), end: endDate.format('YYYY-MM-DD') }, res => {
+    $('#total-income').text(`$${res.total_income}`);
+    $('#income-details').html(res.details.map(d => `<li>${d.url} → ${d.tasks} ამოცანა → $${d.income}</li>`).join(''));
+  });
+}
+
+function fetchTasks() {
+  const search = $('#task-search').val();
+  const status = $('#task-status-filter').val();
+  $.get('/get_tasks', { search, status }, res => {
+    const rows = res.tasks.map(t => `<tr><td>${t.id}</td><td>${t.email}</td><td>${t.url}</td><td>${t.task_type}</td><td>${t.status}</td></tr>`);
+    $('#task-table-body').html(rows.join(''));
+  });
+}
+
+$('#start-btn').click(() => $.post('/start_bot', res => { showToast(res.message, res.success ? 'success' : 'danger'); fetchStatusAndStats(); }));
+$('#stop-btn').click(() => $.post('/stop_bot', res => { showToast(res.message, 'warning'); fetchStatusAndStats(); }));
+
+$('#add-income-btn').click(() => {
+  const amount = parseFloat($('#income-amount').val());
+  if (!amount || amount <= 0) return showToast('გთხოვ შეიყვანო სწორი თანხა', 'danger');
+  $.ajax({ url: '/add_income', method: 'POST', contentType: 'application/json', data: JSON.stringify({ amount }),
+    success: res => { showToast(`დამატდა: $${amount.toFixed(2)}`, 'success'); updateWalletBalance(); updateWalletHistoryChart(); $('#income-amount').val(''); }
+  });
+});
+
+$('#daterange').daterangepicker({ startDate, endDate, locale: { format: 'YYYY-MM-DD', applyLabel: 'ფილტრი', cancelLabel: 'გაუქმება' } },
+  (start, end) => { startDate = start; endDate = end; fetchFinance(); });
+
+$('#task-search, #task-status-filter').on('input change', fetchTasks);
+
+fetchStatusAndStats();
+loadWalletAddress();
+fetchPayoutHistory();
+updateActivityChart();
+updateWalletBalance();
+updateWalletHistoryChart();
+fetchFinance();
+fetchTasks();
+setInterval(fetchStatusAndStats, 10000);
+setInterval(updateWalletBalance, 10000);
+setInterval(updateActivityChart, 60000);
+setInterval(updateWalletHistoryChart, 60000);
+setInterval(fetchFinance, 60000);
+setInterval(fetchTasks, 15000);
+setInterval(fetchPayoutHistory, 30000);
+</script>
+</body>
+</html>
